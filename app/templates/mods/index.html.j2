@@ -1,0 +1,87 @@
+{% extends 'base.html.j2' %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="mb-1">Server Mods</h1>
+      <p class="text-muted mb-0">Install and remove server-side <code>.dlumod</code> files. Bundled mods are image-owned and read-only.</p>
+    </div>
+  </div>
+
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header"><strong>Install mod</strong></div>
+    <div class="card-body">
+      <form method="post" action="{{ url_for('mods.install') }}" enctype="multipart/form-data" class="form-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="custom-file mr-3" style="max-width: 520px;">
+          <input type="file" class="custom-file-input" id="mod_file" name="mod_file" accept=".dlumod" required>
+          <label class="custom-file-label" for="mod_file">Choose .dlumod file</label>
+        </div>
+        <button class="btn btn-primary" type="submit"><i class="fas fa-upload mr-1"></i>Install</button>
+      </form>
+      <small class="form-text text-muted mt-2">The manifest and API version are validated before the file is committed to the shared mod directory.</small>
+    </div>
+  </div>
+
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <strong>Bundled mods</strong><span class="badge badge-secondary">read-only</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>Name</th><th>ID</th><th>Version</th><th>API</th><th>File</th><th>Status</th></tr></thead>
+        <tbody>
+        {% for mod in builtin_mods %}
+          <tr>
+            <td>{{ mod.name }}</td><td><code>{{ mod.id or 'unknown' }}</code></td><td>{{ mod.version or '-' }}</td><td>{{ mod.api or '-' }}</td>
+            <td><code>{{ mod.filename }}</code></td>
+            <td>{% if mod.valid %}<span class="badge badge-success">Valid</span>{% else %}<span class="badge badge-danger">Invalid manifest</span>{% endif %}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="text-muted text-center py-4">No bundled mods found.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <strong>User-installed mods</strong><span class="badge badge-primary">managed</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>Name</th><th>ID</th><th>Version</th><th>API</th><th>File</th><th class="text-right">Actions</th></tr></thead>
+        <tbody>
+        {% for mod in user_mods %}
+          <tr>
+            <td>{{ mod.name }}</td><td><code>{{ mod.id or 'unknown' }}</code></td><td>{{ mod.version or '-' }}</td><td>{{ mod.api or '-' }}</td><td><code>{{ mod.filename }}</code></td>
+            <td class="text-right">
+              {% if mod.valid %}<span class="badge badge-success mr-2">Valid</span>{% else %}<span class="badge badge-danger mr-2">Invalid</span>{% endif %}
+              <form method="post" action="{{ url_for('mods.uninstall', filename=mod.filename) }}" class="d-inline" onsubmit="return confirm('Uninstall {{ mod.name|e }}?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-outline-danger" type="submit"><i class="fas fa-trash-alt mr-1"></i>Uninstall</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="text-muted text-center py-4">No user mods installed.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="alert alert-info mt-4 mb-0">
+    File changes are immediate. Use <code>/modreload</code> or <code>/reloadmods</code> in-game as a developer to atomically activate the new set without restarting WorldServer.
+  </div>
+</div>
+<script>
+  document.addEventListener('change', function (event) {
+    if (event.target && event.target.id === 'mod_file') {
+      var label = event.target.nextElementSibling;
+      if (label && event.target.files.length) label.textContent = event.target.files[0].name;
+    }
+  });
+</script>
+{% endblock %}
