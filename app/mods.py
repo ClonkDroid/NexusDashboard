@@ -1,5 +1,7 @@
 import os
 import re
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
@@ -16,6 +18,21 @@ _FIELD_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+_CATALOG = (
+    {
+        'id': 'debug-panel',
+        'name': 'Debug Panel',
+        'filename': 'DebugPanel.dlumod',
+        'description': 'Graphical developer toolbox: zones, item browser with previews, progression, currencies, missions, cheats and diagnostics.',
+    },
+    {
+        'id': 'debug-world',
+        'name': 'Debug World',
+        'filename': 'DebugWorld.dlumod',
+        'description': 'Developer command set and private Avant Gardens debug instance helpers.',
+    },
+)
+
 
 def _mod_root():
     root = Path(os.getenv('MODS_LOCATION', '/app/mods')).resolve()
@@ -23,11 +40,7 @@ def _mod_root():
     return root
 
 
-def _manifest(path):
-    try:
-        text = path.read_text(encoding='utf-8')
-    except (OSError, UnicodeDecodeError):
-        return None
+def _manifest_text(text):
     match = _MANIFEST_RE.search(text)
     if not match:
         return None
@@ -42,6 +55,13 @@ def _manifest(path):
     except ValueError:
         return None
     return data
+
+
+def _manifest(path):
+    try:
+        return _manifest_text(path.read_text(encoding='utf-8'))
+    except (OSError, UnicodeDecodeError):
+        return None
 
 
 def _entries(root):
@@ -62,12 +82,68 @@ def _entries(root):
     return result
 
 
+def _catalog_entries(installed):
+    installed_by_id = {entry['id']: entry for entry in installed if entry['id']}
+    result = []
+    for entry in _CATALOG:
+        item = dict(entry)
+        item['installed'] = installed_by_id.get(entry['id'])
+        result.append(item)
+    return result
+
+
+def _catalog_url(filename):
+    base = os.getenv(
+        'MOD_CATALOG_BASE_URL',
+        'https://raw.githubusercontent.com/ClonkDroid/DarkflameServer/feature/lua-mod-framework/mods',
+    ).rstrip('/')
+    return f'{base}/{filename}'
+
+
+def _install_payload(root, filename, payload, expected_id=None):
+    max_size = int(os.getenv('MOD_UPLOAD_MAX_BYTES', str(1024 * 1024)))
+    if len(payload) > max_size:
+        return None, f'Mod exceeds the {max_size // 1024} KiB upload limit.'
+
+    try:
+        text = payload.decode('utf-8')
+    except UnicodeDecodeError:
+        return None, 'Mod must be UTF-8 text.'
+
+    manifest = _manifest_text(text)
+    if manifest is None:
+        return None, 'Mod rejected: no valid dlu.mod manifest was found.'
+    if manifest['api'] != 1:
+        return None, f"Mod requests unsupported API {manifest['api']}; this server provides API 1."
+    if expected_id is not None and manifest['id'] != expected_id:
+        return None, f"Catalog integrity check failed: expected mod id '{expected_id}', got '{manifest['id']}'."
+
+    installed = _entries(root)
+    conflicting = [
+        item for item in installed
+        if item['id'] == manifest['id'] and item['filename'] != filename
+    ]
+    if conflicting:
+        return None, f"A mod with id '{manifest['id']}' is already installed as {conflicting[0]['filename']}."
+
+    staging = root / f'.{filename}.upload'
+    target = root / filename
+    staging.write_text(text, encoding='utf-8')
+    os.replace(staging, target)
+    return manifest, None
+
+
 @mods_blueprint.route('/', methods=['GET'])
 @login_required
 @gm_level(8)
 def index():
     root = _mod_root()
-    return render_template('mods/index.html.j2', mods=_entries(root))
+    installed = _entries(root)
+    return render_template(
+        'mods/index.html.j2',
+        mods=installed,
+        catalog=_catalog_entries(installed),
+    )
 
 
 @mods_blueprint.route('/install', methods=['POST'])
@@ -87,41 +163,41 @@ def install():
 
     max_size = int(os.getenv('MOD_UPLOAD_MAX_BYTES', str(1024 * 1024)))
     payload = upload.read(max_size + 1)
-    if len(payload) > max_size:
-        flash(f'Mod exceeds the {max_size // 1024} KiB upload limit.', 'danger')
+    manifest, error = _install_payload(root, filename, payload)
+    if error:
+        flash(error, 'danger')
         return redirect(url_for('main.mods.index'))
 
-    try:
-        text = payload.decode('utf-8')
-    except UnicodeDecodeError:
-        flash('Mod must be UTF-8 text.', 'danger')
-        return redirect(url_for('main.mods.index'))
-
-    staging = root / f'.{filename}.upload'
-    target = root / filename
-    staging.write_text(text, encoding='utf-8')
-    manifest = _manifest(staging)
-    if manifest is None:
-        staging.unlink(missing_ok=True)
-        flash('Mod rejected: no valid dlu.mod manifest was found.', 'danger')
-        return redirect(url_for('main.mods.index'))
-    if manifest['api'] != 1:
-        staging.unlink(missing_ok=True)
-        flash(f"Mod requests unsupported API {manifest['api']}; this server provides API 1.", 'danger')
-        return redirect(url_for('main.mods.index'))
-
-    installed_ids = {
-        item['id'] for item in _entries(root)
-        if item['id'] and item['filename'] != filename
-    }
-    if manifest['id'] in installed_ids:
-        staging.unlink(missing_ok=True)
-        flash(f"A mod with id '{manifest['id']}' is already installed.", 'danger')
-        return redirect(url_for('main.mods.index'))
-
-    os.replace(staging, target)
     log_audit(f"MODS::INSTALL {manifest['id']} {manifest['version']} ({filename})")
     flash(f"Installed {manifest['name']} {manifest['version']}. Run /modreload in-game to activate it.", 'success')
+    return redirect(url_for('main.mods.index'))
+
+
+@mods_blueprint.route('/catalog/<mod_id>/install', methods=['POST'])
+@login_required
+@gm_level(8)
+def install_catalog(mod_id):
+    catalog = next((item for item in _CATALOG if item['id'] == mod_id), None)
+    if catalog is None:
+        flash('Unknown catalog mod.', 'danger')
+        return redirect(url_for('main.mods.index'))
+
+    max_size = int(os.getenv('MOD_UPLOAD_MAX_BYTES', str(1024 * 1024)))
+    request_url = _catalog_url(catalog['filename'])
+    try:
+        with urllib.request.urlopen(request_url, timeout=8) as response:
+            payload = response.read(max_size + 1)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        flash(f'Unable to download {catalog["name"]} from the mod catalog: {exc}', 'danger')
+        return redirect(url_for('main.mods.index'))
+
+    manifest, error = _install_payload(_mod_root(), catalog['filename'], payload, expected_id=catalog['id'])
+    if error:
+        flash(error, 'danger')
+        return redirect(url_for('main.mods.index'))
+
+    log_audit(f"MODS::CATALOG_INSTALL {manifest['id']} {manifest['version']} ({catalog['filename']})")
+    flash(f"Installed {manifest['name']} {manifest['version']} from the catalog. Run /modreload in-game to activate it.", 'success')
     return redirect(url_for('main.mods.index'))
 
 
