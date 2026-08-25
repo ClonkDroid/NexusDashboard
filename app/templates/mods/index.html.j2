@@ -1,0 +1,95 @@
+{% extends 'base.html.j2' %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="mb-1">Server Mods</h1>
+      <p class="text-muted mb-0">Browse, install and remove server-side <code>.dlumod</code> files.</p>
+    </div>
+  </div>
+
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <strong>Available mods</strong><span class="badge badge-info">catalog</span>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        {% for mod in catalog %}
+        <div class="col-lg-6 mb-3">
+          <div class="border rounded p-3 h-100 d-flex flex-column">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <h5 class="mb-1">{{ mod.name }}</h5>
+                <code>{{ mod.id }}</code>
+              </div>
+              {% if mod.installed %}<span class="badge badge-success">Installed {{ mod.installed.version }}</span>{% endif %}
+            </div>
+            <p class="text-muted mt-3 mb-3 flex-grow-1">{{ mod.description }}</p>
+            <form method="post" action="{{ url_for('main.mods.install_catalog', mod_id=mod.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-primary btn-block" type="submit">
+                <i class="fas fa-download mr-1"></i>{% if mod.installed %}Update / Reinstall{% else %}Install{% endif %}
+              </button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header"><strong>Install local mod</strong></div>
+    <div class="card-body">
+      <form method="post" action="{{ url_for('main.mods.install') }}" enctype="multipart/form-data" class="form-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="custom-file mr-3" style="max-width: 520px;">
+          <input type="file" class="custom-file-input" id="mod_file" name="mod_file" accept=".dlumod" required>
+          <label class="custom-file-label" for="mod_file">Choose .dlumod file</label>
+        </div>
+        <button class="btn btn-outline-primary" type="submit"><i class="fas fa-upload mr-1"></i>Install file</button>
+      </form>
+      <small class="form-text text-muted mt-2">Catalog and local installs use the same manifest/API validation.</small>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <strong>Installed mods</strong><span class="badge badge-primary">managed</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>Name</th><th>ID</th><th>Version</th><th>API</th><th>File</th><th class="text-right">Actions</th></tr></thead>
+        <tbody>
+        {% for mod in mods %}
+          <tr>
+            <td>{{ mod.name }}</td><td><code>{{ mod.id or 'unknown' }}</code></td><td>{{ mod.version or '-' }}</td><td>{{ mod.api or '-' }}</td><td><code>{{ mod.filename }}</code></td>
+            <td class="text-right">
+              {% if mod.valid %}<span class="badge badge-success mr-2">Valid</span>{% else %}<span class="badge badge-danger mr-2">Invalid</span>{% endif %}
+              <form method="post" action="{{ url_for('main.mods.uninstall', filename=mod.filename) }}" class="d-inline" onsubmit="return confirm('Uninstall {{ mod.name|e }}?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-outline-danger" type="submit"><i class="fas fa-trash-alt mr-1"></i>Uninstall</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="text-muted text-center py-4">No mods installed.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="alert alert-info mt-4 mb-0">
+    Installs and removals change the shared mod directory immediately. Use <code>/modreload</code> in-game to atomically activate the new set without restarting WorldServer.
+  </div>
+</div>
+<script>
+  document.addEventListener('change', function (event) {
+    if (event.target && event.target.id === 'mod_file') {
+      var label = event.target.nextElementSibling;
+      if (label && event.target.files.length) label.textContent = event.target.files[0].name;
+    }
+  });
+</script>
+{% endblock %}

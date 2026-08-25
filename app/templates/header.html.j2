@@ -51,6 +51,10 @@
           <a id='play_keys-index' class='nav-link' href='{{ url_for('play_keys.index') }}'>Play Keys</a>
         {% endif %}
 
+        {% if current_user.is_authenticated and current_user.gm_level >= 8 %}
+          <a id='mods-index' class='nav-link' href='{{ url_for('main.mods.index') }}'>Mods</a>
+        {% endif %}
+
         {% if current_user.is_authenticated and current_user.gm_level >= 2 %}
           <a id='report-index' class='nav-link' href='{{ url_for('reports.index') }}'>Reports</a>
           <li class="nav-item dropdown">
