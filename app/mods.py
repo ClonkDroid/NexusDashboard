@@ -2,7 +2,7 @@ import os
 import re
 from pathlib import Path
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_user import login_required
 from werkzeug.utils import secure_filename
 
@@ -10,10 +10,7 @@ from app import gm_level, log_audit
 
 mods_blueprint = Blueprint('mods', __name__)
 
-_MANIFEST_RE = re.compile(
-    r"dlu\.mod\s*\{(?P<body>.*?)\}",
-    re.IGNORECASE | re.DOTALL,
-)
+_MANIFEST_RE = re.compile(r"dlu\.mod\s*\{(?P<body>.*?)\}", re.IGNORECASE | re.DOTALL)
 _FIELD_RE = re.compile(
     r"\b(?P<key>id|name|version|api)\s*=\s*(?:(?P<quote>['\"])(?P<str>.*?)(?P=quote)|(?P<num>\d+))",
     re.IGNORECASE | re.DOTALL,
@@ -21,8 +18,8 @@ _FIELD_RE = re.compile(
 
 
 def _mod_roots():
-    builtin = Path(current_app.config['BUILTIN_MODS_LOCATION']).resolve()
-    user = Path(current_app.config['MODS_LOCATION']).resolve()
+    builtin = Path(os.getenv('BUILTIN_MODS_LOCATION', '/app/builtin-mods')).resolve()
+    user = Path(os.getenv('MODS_LOCATION', '/app/mods')).resolve()
     user.mkdir(parents=True, exist_ok=True)
     return builtin, user
 
@@ -72,39 +69,35 @@ def _entries(root, builtin):
 @gm_level(8)
 def index():
     builtin, user = _mod_roots()
-    return render_template(
-        'mods/index.html.j2',
-        builtin_mods=_entries(builtin, True),
-        user_mods=_entries(user, False),
-    )
+    return render_template('mods/index.html.j2', builtin_mods=_entries(builtin, True), user_mods=_entries(user, False))
 
 
 @mods_blueprint.route('/install', methods=['POST'])
 @login_required
 @gm_level(8)
 def install():
-    _, user_root = _mod_roots()
+    builtin_root, user_root = _mod_roots()
     upload = request.files.get('mod_file')
     if upload is None or not upload.filename:
         flash('Choose a .dlumod file to install.', 'warning')
-        return redirect(url_for('mods.index'))
+        return redirect(url_for('main.mods.index'))
 
     filename = secure_filename(upload.filename)
     if not filename.lower().endswith('.dlumod'):
         flash('Only .dlumod files can be installed.', 'danger')
-        return redirect(url_for('mods.index'))
+        return redirect(url_for('main.mods.index'))
 
-    max_size = current_app.config['MOD_UPLOAD_MAX_BYTES']
+    max_size = int(os.getenv('MOD_UPLOAD_MAX_BYTES', str(1024 * 1024)))
     payload = upload.read(max_size + 1)
     if len(payload) > max_size:
         flash(f'Mod exceeds the {max_size // 1024} KiB upload limit.', 'danger')
-        return redirect(url_for('mods.index'))
+        return redirect(url_for('main.mods.index'))
 
     try:
         text = payload.decode('utf-8')
     except UnicodeDecodeError:
         flash('Mod must be UTF-8 text.', 'danger')
-        return redirect(url_for('mods.index'))
+        return redirect(url_for('main.mods.index'))
 
     staging = user_root / f'.{filename}.upload'
     target = user_root / filename
@@ -113,13 +106,12 @@ def install():
     if manifest is None:
         staging.unlink(missing_ok=True)
         flash('Mod rejected: no valid dlu.mod manifest was found.', 'danger')
-        return redirect(url_for('mods.index'))
+        return redirect(url_for('main.mods.index'))
     if manifest['api'] != 1:
         staging.unlink(missing_ok=True)
         flash(f"Mod requests unsupported API {manifest['api']}; this server provides API 1.", 'danger')
-        return redirect(url_for('mods.index'))
+        return redirect(url_for('main.mods.index'))
 
-    builtin_root, _ = _mod_roots()
     installed_ids = {
         item['id'] for item in (_entries(builtin_root, True) + _entries(user_root, False))
         if item['id'] and item['filename'] != filename
@@ -127,12 +119,12 @@ def install():
     if manifest['id'] in installed_ids:
         staging.unlink(missing_ok=True)
         flash(f"A mod with id '{manifest['id']}' is already installed.", 'danger')
-        return redirect(url_for('mods.index'))
+        return redirect(url_for('main.mods.index'))
 
     os.replace(staging, target)
     log_audit(f"MODS::INSTALL {manifest['id']} {manifest['version']} ({filename})")
     flash(f"Installed {manifest['name']} {manifest['version']}. Run /modreload in-game to activate it.", 'success')
-    return redirect(url_for('mods.index'))
+    return redirect(url_for('main.mods.index'))
 
 
 @mods_blueprint.route('/uninstall/<path:filename>', methods=['POST'])
@@ -143,16 +135,16 @@ def uninstall(filename):
     safe_name = secure_filename(filename)
     if safe_name != filename or not safe_name.lower().endswith('.dlumod'):
         flash('Invalid mod filename.', 'danger')
-        return redirect(url_for('mods.index'))
+        return redirect(url_for('main.mods.index'))
 
     target = (user_root / safe_name).resolve()
     if target.parent != user_root or not target.is_file():
         flash('User mod not found.', 'warning')
-        return redirect(url_for('mods.index'))
+        return redirect(url_for('main.mods.index'))
 
     manifest = _manifest(target)
     target.unlink()
     mod_id = manifest['id'] if manifest else safe_name
     log_audit(f"MODS::UNINSTALL {mod_id} ({safe_name})")
     flash(f"Uninstalled {mod_id}. Run /modreload in-game to apply the change.", 'success')
-    return redirect(url_for('mods.index'))
+    return redirect(url_for('main.mods.index'))
