@@ -4,12 +4,42 @@
   <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
       <h1 class="mb-1">Server Mods</h1>
-      <p class="text-muted mb-0">All installed server-side <code>.dlumod</code> files are managed here.</p>
+      <p class="text-muted mb-0">Browse, install and remove server-side <code>.dlumod</code> files.</p>
     </div>
   </div>
 
   <div class="card mb-4 shadow-sm">
-    <div class="card-header"><strong>Install mod</strong></div>
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <strong>Available mods</strong><span class="badge badge-info">catalog</span>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        {% for mod in catalog %}
+        <div class="col-lg-6 mb-3">
+          <div class="border rounded p-3 h-100 d-flex flex-column">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <h5 class="mb-1">{{ mod.name }}</h5>
+                <code>{{ mod.id }}</code>
+              </div>
+              {% if mod.installed %}<span class="badge badge-success">Installed {{ mod.installed.version }}</span>{% endif %}
+            </div>
+            <p class="text-muted mt-3 mb-3 flex-grow-1">{{ mod.description }}</p>
+            <form method="post" action="{{ url_for('main.mods.install_catalog', mod_id=mod.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-primary btn-block" type="submit">
+                <i class="fas fa-download mr-1"></i>{% if mod.installed %}Update / Reinstall{% else %}Install{% endif %}
+              </button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header"><strong>Install local mod</strong></div>
     <div class="card-body">
       <form method="post" action="{{ url_for('main.mods.install') }}" enctype="multipart/form-data" class="form-inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -17,9 +47,9 @@
           <input type="file" class="custom-file-input" id="mod_file" name="mod_file" accept=".dlumod" required>
           <label class="custom-file-label" for="mod_file">Choose .dlumod file</label>
         </div>
-        <button class="btn btn-primary" type="submit"><i class="fas fa-upload mr-1"></i>Install</button>
+        <button class="btn btn-outline-primary" type="submit"><i class="fas fa-upload mr-1"></i>Install file</button>
       </form>
-      <small class="form-text text-muted mt-2">The manifest and API version are validated before installation.</small>
+      <small class="form-text text-muted mt-2">Catalog and local installs use the same manifest/API validation.</small>
     </div>
   </div>
 
@@ -51,7 +81,7 @@
   </div>
 
   <div class="alert alert-info mt-4 mb-0">
-    File changes are immediate. Use <code>/modreload</code> or <code>/reloadmods</code> in-game as a developer to atomically activate the new set without restarting WorldServer.
+    Installs and removals change the shared mod directory immediately. Use <code>/modreload</code> in-game to atomically activate the new set without restarting WorldServer.
   </div>
 </div>
 <script>
