@@ -17,11 +17,10 @@ _FIELD_RE = re.compile(
 )
 
 
-def _mod_roots():
-    builtin = Path(os.getenv('BUILTIN_MODS_LOCATION', '/app/builtin-mods')).resolve()
-    user = Path(os.getenv('MODS_LOCATION', '/app/mods')).resolve()
-    user.mkdir(parents=True, exist_ok=True)
-    return builtin, user
+def _mod_root():
+    root = Path(os.getenv('MODS_LOCATION', '/app/mods')).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 def _manifest(path):
@@ -45,7 +44,7 @@ def _manifest(path):
     return data
 
 
-def _entries(root, builtin):
+def _entries(root):
     if not root.is_dir():
         return []
     result = []
@@ -53,7 +52,6 @@ def _entries(root, builtin):
         manifest = _manifest(path)
         result.append({
             'filename': path.name,
-            'builtin': builtin,
             'valid': manifest is not None,
             'id': manifest.get('id') if manifest else None,
             'name': manifest.get('name') if manifest else path.stem,
@@ -68,15 +66,15 @@ def _entries(root, builtin):
 @login_required
 @gm_level(8)
 def index():
-    builtin, user = _mod_roots()
-    return render_template('mods/index.html.j2', builtin_mods=_entries(builtin, True), user_mods=_entries(user, False))
+    root = _mod_root()
+    return render_template('mods/index.html.j2', mods=_entries(root))
 
 
 @mods_blueprint.route('/install', methods=['POST'])
 @login_required
 @gm_level(8)
 def install():
-    builtin_root, user_root = _mod_roots()
+    root = _mod_root()
     upload = request.files.get('mod_file')
     if upload is None or not upload.filename:
         flash('Choose a .dlumod file to install.', 'warning')
@@ -99,8 +97,8 @@ def install():
         flash('Mod must be UTF-8 text.', 'danger')
         return redirect(url_for('main.mods.index'))
 
-    staging = user_root / f'.{filename}.upload'
-    target = user_root / filename
+    staging = root / f'.{filename}.upload'
+    target = root / filename
     staging.write_text(text, encoding='utf-8')
     manifest = _manifest(staging)
     if manifest is None:
@@ -113,7 +111,7 @@ def install():
         return redirect(url_for('main.mods.index'))
 
     installed_ids = {
-        item['id'] for item in (_entries(builtin_root, True) + _entries(user_root, False))
+        item['id'] for item in _entries(root)
         if item['id'] and item['filename'] != filename
     }
     if manifest['id'] in installed_ids:
@@ -131,15 +129,15 @@ def install():
 @login_required
 @gm_level(8)
 def uninstall(filename):
-    _, user_root = _mod_roots()
+    root = _mod_root()
     safe_name = secure_filename(filename)
     if safe_name != filename or not safe_name.lower().endswith('.dlumod'):
         flash('Invalid mod filename.', 'danger')
         return redirect(url_for('main.mods.index'))
 
-    target = (user_root / safe_name).resolve()
-    if target.parent != user_root or not target.is_file():
-        flash('User mod not found.', 'warning')
+    target = (root / safe_name).resolve()
+    if target.parent != root or not target.is_file():
+        flash('Mod not found.', 'warning')
         return redirect(url_for('main.mods.index'))
 
     manifest = _manifest(target)
