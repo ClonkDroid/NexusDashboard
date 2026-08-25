@@ -11,7 +11,7 @@
   <div class="card mb-4 shadow-sm">
     <div class="card-header"><strong>Install mod</strong></div>
     <div class="card-body">
-      <form method="post" action="{{ url_for('mods.install') }}" enctype="multipart/form-data" class="form-inline">
+      <form method="post" action="{{ url_for('main.mods.install') }}" enctype="multipart/form-data" class="form-inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="custom-file mr-3" style="max-width: 520px;">
           <input type="file" class="custom-file-input" id="mod_file" name="mod_file" accept=".dlumod" required>
@@ -58,7 +58,7 @@
             <td>{{ mod.name }}</td><td><code>{{ mod.id or 'unknown' }}</code></td><td>{{ mod.version or '-' }}</td><td>{{ mod.api or '-' }}</td><td><code>{{ mod.filename }}</code></td>
             <td class="text-right">
               {% if mod.valid %}<span class="badge badge-success mr-2">Valid</span>{% else %}<span class="badge badge-danger mr-2">Invalid</span>{% endif %}
-              <form method="post" action="{{ url_for('mods.uninstall', filename=mod.filename) }}" class="d-inline" onsubmit="return confirm('Uninstall {{ mod.name|e }}?');">
+              <form method="post" action="{{ url_for('main.mods.uninstall', filename=mod.filename) }}" class="d-inline" onsubmit="return confirm('Uninstall {{ mod.name|e }}?');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button class="btn btn-sm btn-outline-danger" type="submit"><i class="fas fa-trash-alt mr-1"></i>Uninstall</button>
               </form>
