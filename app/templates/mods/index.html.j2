@@ -4,7 +4,7 @@
   <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
       <h1 class="mb-1">Server Mods</h1>
-      <p class="text-muted mb-0">Install and remove server-side <code>.dlumod</code> files. Bundled mods are image-owned and read-only.</p>
+      <p class="text-muted mb-0">All installed server-side <code>.dlumod</code> files are managed here.</p>
     </div>
   </div>
 
@@ -19,41 +19,19 @@
         </div>
         <button class="btn btn-primary" type="submit"><i class="fas fa-upload mr-1"></i>Install</button>
       </form>
-      <small class="form-text text-muted mt-2">The manifest and API version are validated before the file is committed to the shared mod directory.</small>
-    </div>
-  </div>
-
-  <div class="card mb-4 shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <strong>Bundled mods</strong><span class="badge badge-secondary">read-only</span>
-    </div>
-    <div class="table-responsive">
-      <table class="table table-hover mb-0">
-        <thead><tr><th>Name</th><th>ID</th><th>Version</th><th>API</th><th>File</th><th>Status</th></tr></thead>
-        <tbody>
-        {% for mod in builtin_mods %}
-          <tr>
-            <td>{{ mod.name }}</td><td><code>{{ mod.id or 'unknown' }}</code></td><td>{{ mod.version or '-' }}</td><td>{{ mod.api or '-' }}</td>
-            <td><code>{{ mod.filename }}</code></td>
-            <td>{% if mod.valid %}<span class="badge badge-success">Valid</span>{% else %}<span class="badge badge-danger">Invalid manifest</span>{% endif %}</td>
-          </tr>
-        {% else %}
-          <tr><td colspan="6" class="text-muted text-center py-4">No bundled mods found.</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
+      <small class="form-text text-muted mt-2">The manifest and API version are validated before installation.</small>
     </div>
   </div>
 
   <div class="card shadow-sm">
     <div class="card-header d-flex justify-content-between align-items-center">
-      <strong>User-installed mods</strong><span class="badge badge-primary">managed</span>
+      <strong>Installed mods</strong><span class="badge badge-primary">managed</span>
     </div>
     <div class="table-responsive">
       <table class="table table-hover mb-0">
         <thead><tr><th>Name</th><th>ID</th><th>Version</th><th>API</th><th>File</th><th class="text-right">Actions</th></tr></thead>
         <tbody>
-        {% for mod in user_mods %}
+        {% for mod in mods %}
           <tr>
             <td>{{ mod.name }}</td><td><code>{{ mod.id or 'unknown' }}</code></td><td>{{ mod.version or '-' }}</td><td>{{ mod.api or '-' }}</td><td><code>{{ mod.filename }}</code></td>
             <td class="text-right">
@@ -65,7 +43,7 @@
             </td>
           </tr>
         {% else %}
-          <tr><td colspan="6" class="text-muted text-center py-4">No user mods installed.</td></tr>
+          <tr><td colspan="6" class="text-muted text-center py-4">No mods installed.</td></tr>
         {% endfor %}
         </tbody>
       </table>
