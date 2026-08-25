@@ -2,11 +2,13 @@ from flask import render_template, Blueprint, send_from_directory
 from flask_user import current_user, login_required
 
 from app.models import Account, CharacterInfo, ActivityLog
+from app.mods import mods_blueprint
 
 import datetime
 import time
 
 main_blueprint = Blueprint('main', __name__)
+main_blueprint.register_blueprint(mods_blueprint, url_prefix='/mods')
 
 
 @main_blueprint.route('/', methods=['GET'])
